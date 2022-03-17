@@ -20,7 +20,6 @@ RUN apt-get update && \
     make install -j$(grep processor /proc/cpuinfo | wc -l) && \
     chmod +x /tini
 
-
 FROM $IMAGE
 
 LABEL maintainer='Robert Reiz <reiz@versioneye.com>'
