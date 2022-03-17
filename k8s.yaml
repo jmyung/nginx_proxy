@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: proxy
+  name: forward-proxy
+  labels:
+    app: forward-proxy
+spec:
+  strategy:
+    type: Recreate
+  replicas: 2
+  selector:
+    matchLabels:
+      app: forward-proxy
+  template:
+    metadata:
+      labels:
+        app: forward-proxy
+    spec:
+            #      tolerations:
+            #      - effect: NoExecute
+            #        key: internet
+            #        operator: Equal
+            #        value: enabled
+      containers:
+      - name: forward-proxy
+        image: human537/forward-proxy:v0.4
+        ports:
+        - containerPort: 8888
+        resources:
+          limits:
+            cpu: 2
+            memory: 4Gi
+          requests:
+            cpu: 1
+            memory: 2Gi
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /usr/local/nginx/conf/
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: proxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: proxy
+  name: forward-proxy
+spec:
+  selector:
+    app: forward-proxy
+  ports:
+    - protocol: TCP
+      port: 8888
+      targetPort: 8888
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-config
+  namespace: proxy
+data:
+  nginx.conf: |
+    user www-data;
+    worker_processes auto;
+    daemon off; # Don't run Nginx as daemon, as we run it in Docker we need a foreground process.
+    events { }
+
+    http {
+        server_names_hash_bucket_size 128;
+
+        access_log /dev/stdout;
+        error_log /dev/stdout;
+
+        # Blacklist Google
+        server {
+            listen       8888;
+            return 404;
+        }
+
+        # Everything else is allowed
+        server {
+            listen       8888;
+            server_name ~.+;
+            proxy_connect;
+            proxy_max_temp_file_size 0;
+            #            resolver 8.8.8.8 ipv6=off;
+            location / {
+               proxy_pass http://$http_host;
+               proxy_set_header Host $http_host;
+            }
+        }
+
+    }
